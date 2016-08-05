@@ -62,6 +62,19 @@ object Utils extends LazyLogging {
     result
   }
 
+  private[firrtl] def squashEmpty(s: Statement): Statement = {
+    s map squashEmpty match {
+      case Block(stmts) =>
+        val newStmts = stmts filter (_ != EmptyStmt)
+        newStmts.size match {
+          case 0 => EmptyStmt
+          case 1 => newStmts.head
+          case _ => Block(newStmts)
+        }
+      case s => s
+    }
+  }
+
   /** Indent the results of [[ir.FirrtlNode.serialize]] */
   def indent(str: String) = str replaceAllLiterally ("\n", "\n  ")
   def serialize(bi: BigInt): String =
