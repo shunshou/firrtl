@@ -101,6 +101,11 @@ object ResolveKinds extends Pass {
          val kinds = LinkedHashMap[String,Kind]()
          def resolve (body:Statement) = {
             def resolve_expr (e:Expression):Expression = {
+
+               //println(e.serialize)
+
+
+
                e match {
                   case e:WRef => WRef(e.name,tpe(e),kinds(e.name),e.gender)
                   case e => e map (resolve_expr)

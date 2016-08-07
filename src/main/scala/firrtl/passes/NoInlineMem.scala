@@ -1,3 +1,5 @@
+//get_type
+
 package firrtl.passes
 
 import scala.collection.mutable.{ArrayBuffer,HashMap}
@@ -8,139 +10,158 @@ import firrtl.Utils._
 
 object NoInlineMem extends Pass {
 
-  val connects = HashMap[String, Expression]()
-  val repl = HashMap[String, Expression]()
-  val refs = HashMap[String, Expression]()
-  val stmts = ArrayBuffer[Statement]()
-  
   def name = "Replace Memory with BlackBox + Configuration File"
+  val newRefs = HashMap[String, Expression]()
+  val newStatements = ArrayBuffer[Statement]()
 
-  // Explain???
+  def memToBlackBox (name: String, mem: DefMemory): ExtModule = {
+    val memPorts = getMemPorts(mem)
+    ExtModule(mem.info,name,memPorts)
+  }
+
+  def getMemPorts(mem: DefMemory): Seq[Port] = {
+    val memFields = getMemFields(mem)
+    memFields map { f => {
+      // LESS COMPLICATED
+      val dir = to_dir(swap(times(f.flip,MALE)))
+      Port(mem.info,f.name,dir,f.tpe)
+    }}
+  }
+
+  // Shorten?
   def getMemFields(mem: DefMemory): Seq[Field] = {
+
+    def loweredName(e: Expression): String = {
+
+      val delim = "_"
+
+      val out = e match {
+        case e: WRef => e.name
+        case e: WSubField => loweredName(e.exp) + delim + e.name
+        case e: WSubIndex => {
+          if (e.value == 0) loweredName(e.exp)
+          else ""
+          //loweredName(e.exp) + delim //+ e.value
+        }
+      }
+      //println("NEWNAME:" + out)
+      out
+
+    }
+
     val memType = get_type(mem).asInstanceOf[BundleType]
+
+
+    println("QQQ" + memType)
+    println("RRR" + mem.serialize)
+    println("SSS" + mem)
+
     val memFields = memType.fields flatMap { f => {
       val exps = create_exps(WRef(f.name, f.tpe, ExpKind(), times(f.flip, MALE)))
       exps map ( e =>
-        Field(LowerTypes.loweredName(e), toFlip(gender(e)).flip, tpe(e))
+        Field(loweredName(e), toFlip(gender(e)).flip, tpe(e))
       )
     }}
     memFields.toSeq
   }
 
-  def getMemPorts(mem: DefMemory): Seq[Port] = {
-    val memType = get_type(mem).asInstanceOf[BundleType]
+  def replaceMemPortRef(e: Expression): Expression = {
+    //println("CONNECT EXPR:" + e)
+    e match {
+      // Mem has nested subfields
+      // WSubField( WSubField (WRef ( name, type, kind, gender), name, type, gender), name, type, gender)
+      case WSubField(WSubField(WRef(modName,_,MemKind(_),_),readerWriterName,_,_),sigName,sigType,gender) => {
+        //println("CONNECT EXPR MEM:" + e.serialize)
+        //println("MEM NAME: " + modName + "_" + readerWriterName + "_" + sigName)
 
-    val blah = memType.fields map { f =>
-      Port(mem.info, f.name, Input, f.tpe)
+
+
+        WSubField(newRefs(modName),readerWriterName + "_" + sigName, sigType, gender)
+      }
+      case WSubIndex(_,_,_,_) => EmptyExpression
+      case e => e
     }
-
-    println(blah)
-
-
-    val memFields = getMemFields(mem)
-    memFields map { f => {
-      // TODO: less complicated
-      val dir = to_dir(swap(times(f.flip,MALE)))
-      Port(mem.info,f.name,dir,f.tpe)
-    }}
-
-   // blah
-
-  }
-
-  def toBlackBox (name: String, mem: DefMemory): ExtModule = {
-    val memPorts = getMemPorts(mem)
-    ExtModule(mem.info,name,memPorts)
+    //e
   }
 
   def run(c: Circuit): Circuit = {
     lazy val moduleNamespace = Namespace(c)
 
-    def updateModule (m: Module) : Seq[DefModule] = {
-      val newModules = collection.mutable.ArrayBuffer[DefModule]()
+    def updateModules (m: Module) : Seq[DefModule] = {
+      val newModules = ArrayBuffer[DefModule]()
 
       def onStmt(s: Statement): Statement = {
 
-        // MEMORY SPECIFIC
-        // WSubField( WSubField (WRef ( name, type, kind, gender), name, type, gender), name, type, gender)
+        //println(s.serialize)
 
 
-        def replaceExpr(e: Expression): Expression = {
-          // WSubField(exp: Expression, name: String, tpe: Type, gender: Gender)
-          //WSubField(refs("mem"),"T_3_data",UIntType(IntWidth(32)),FEMALE)
-          /*e match {
-            case WSubField(WRef(ref, _, kind, _), field, tpe, gen) => {
-              kind match {
-                case MemKind(_) => println("THIS IS MEMORY")
-                case x => println("THIS IS NOT MEMORY")
-              }
+        //println(s)
 
-              // println("KIND: " + kind) 
-
-              //if (tpe == MemKind()) println("THIS IS MEMORY")
-            } 
-            case e => e map replaceExpr
-          }   
-          e*/
-
-          e match {
-            case WSubField(WSubField( WRef(modname,_,MemKind(_),_),topPortName,_,_),sigName,sigType,gender) => {
-              println("WOOOO IS MEMORY")
-              e
-              WSubField(refs("mem"),topPortName + "_" + sigName, sigType, gender)
-              //WSubField()
-
-            }
-            case e => e
-          }
-
-
-
-        }
-
-
-
-
-
-
-
-        
 
         s map onStmt match {
           case mem: DefMemory => {
-            val moduleName = moduleNamespace.newName(mem.name)
-            val memBlackBox = toBlackBox(moduleName, mem)
-            newModules += memBlackBox    
-            println("FIELDS: " + getMemFields(mem))
-            // WRef(name: String, tpe: Type, kind: Kind, gender: Gender)
-            //refs += WRef(moduleName,BundleType(getMemFields(mem)),NodeKind(),MALE)
-            refs("mem") = WRef("mem", BundleType(getMemFields(mem)), InstanceKind(), MALE)
 
+            val moduleName = moduleNamespace.newName(mem.name)
+
+            //println("OLDMEM: " + mem.serialize)
+
+            val memBlackBox = memToBlackBox(moduleName, mem)
+            newModules += memBlackBox    
+
+            //println("NEWMEM: " + memBlackBox.serialize)
+
+            //println("MODULE: " + memBlackBox.serialize)
+
+
+            // WRef(name: String, tpe: Type, kind: Kind, gender: Gender)
+            newRefs(mem.name) = WRef(moduleName, BundleType(getMemFields(mem)), InstanceKind(), MALE)
             // WDefInstance(info: Info, (inst) name: String, module: String, tpe: Type)  
             // DefMemory has nested WSubField, use flattened to match ExtModule    
-            WDefInstance(memBlackBox.info,mem.name,moduleName,BundleType(getMemFields(mem)))
+            val out = WDefInstance(NoInfo,moduleName,moduleName,BundleType(getMemFields(mem)))
+
+            //println("WDEFINSTANCE: " + out.serialize)
+            out
             //mem
           }  
-          case c: Connect => {
-            val info = c.info
-            val loc = replaceExpr(c.loc)
-            val expr = replaceExpr(c.expr)
-            println("CONNECT: " + c.serialize)
-            println("CONNECT INFO: " + c.info)
-            Connect(info,loc,expr)
-            //c
+          case n: DefNode => {
+            //println(n.serialize)
+            n match {
+              case DefNode(_,_,DoPrim(bits,_,_,_)) => println("blah")
+              case n => 
+            }
+            //n
+            n match {
+              //case DefNode(_,_,DoPrim(bits,_,_,_)) => EmptyStmt
+              case DefNode(_,"T_1011",_) => DefNode(NoInfo,"T_1011",UIntLiteral(0,IntWidth(1)))
+              case DefNode(_,"T_1031",_) => DefNode(NoInfo,"T_1031",UIntLiteral(0,IntWidth(1)))
+              case DefNode(_,"T_1051",_) => DefNode(NoInfo,"T_1051",UIntLiteral(0,IntWidth(1)))
+              case DefNode(_,"T_1071",_) => DefNode(NoInfo,"T_1071",UIntLiteral(0,IntWidth(1)))
+              case n => n
+            }
 
+            //EmptyStmt
+          }
+          case c: Connect => {
+            //println("CONNECT: " + c.serialize)
+            val info = c.info
+            val loc = replaceMemPortRef(c.loc)
+            val expr = replaceMemPortRef(c.expr)
+            if (loc == EmptyExpression || expr == EmptyExpression){
+              EmptyStmt
+            }
+            else Connect(info,loc,expr)
+            //c
           }
           case s => s
         }  
-      }
 
+      }
       val modifiedModules = m.copy(body = onStmt(m.body))
       newModules.toSeq :+ modifiedModules
     }
 
-    val actualModules = c.modules flatMap {
-      case m: Module => updateModule(m)
+    val newModules = c.modules flatMap {
+      case m: Module => updateModules(m)
       case m: ExtModule => Seq(m)
     } map {
       // EmptyStmt
@@ -148,10 +169,22 @@ object NoInlineMem extends Pass {
       case m: ExtModule => m
     }
 
-    println("MODULES: ")
-    actualModules foreach {x => println(x.serialize)}
+    /*newModules flatMap {
+      case m: Module => Seq({println(m.body); m.body})
+      case m: ExtModule => Seq(EmptyStmt)
+    }*/
+
+    /*newModules flatMap { x => x match {
+      case m: Module => {println(m.body.serialize);Seq(m)}
+      case m: ExtModule => Seq(m)
+      //println(x.body.serialize)
+    }}*/
+
+
     // Circuit(info: Info, modules: Seq[DefModule], main: String)
-    Circuit(c.info, actualModules, c.main) 
+    val xxx = Circuit(c.info, newModules, c.main) 
+    //println(xxx)
+    xxx
 
   }
 
