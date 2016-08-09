@@ -124,8 +124,6 @@ class HighFirrtlToMiddleFirrtl () extends Transform with SimpleRun {
 class MiddleFirrtlToLowFirrtl () extends Transform with SimpleRun {
    val passSeq = Seq(
       passes.Legalize,
-      passes.InferReadWritePass,
-      passes.ReplaceSeqMems,
       passes.LowerTypes,
       passes.ResolveKinds,
       passes.InferTypes,
@@ -191,6 +189,7 @@ class LowFirrtlCompiler extends Compiler {
       new ResolveAndCheck(),
       new HighFirrtlToMiddleFirrtl(),
       new passes.InferReadWrite(TransID(-1)),
+      new passes.ReplaceSeqMems(TransID(-2)),
       new MiddleFirrtlToLowFirrtl(),
       new EmitFirrtl(writer)
    )
@@ -204,6 +203,7 @@ class VerilogCompiler extends Compiler {
       new ResolveAndCheck(),
       new HighFirrtlToMiddleFirrtl(),
       new passes.InferReadWrite(TransID(-1)),
+      new passes.ReplaceSeqMems(TransID(-2)),
       new MiddleFirrtlToLowFirrtl(),
       new passes.InlineInstances(TransID(0)),
       new EmitVerilogFromLowFirrtl(writer)

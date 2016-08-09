@@ -45,6 +45,7 @@ Options:
   --info-mode <mode>    Specify Info Mode
                         Supported modes: ignore, use, gen, append
   --inferRW <circuit>   Enable readwrite port inference for the target circuit
+  --subMem <circuit>    Substitute memory black box + configuration file for sequential memories
   """
 
   // Compiles circuit. First parses a circuit from an input file,
@@ -91,12 +92,16 @@ Options:
     def handleInferRWOption(value: String) = 
       passes.InferReadWriteAnnotation(value, TransID(-1))
 
+    def handleSubMemOption(value: String) =
+      passes.ReplaceSeqMemsAnnotation(value, TransID(-2))  
+
     run(args: Array[String],
       Map( "high" -> new HighFirrtlCompiler(),
         "low" -> new LowFirrtlCompiler(),
         "verilog" -> new VerilogCompiler()),
       Map("--inline" -> handleInlineOption _,
-          "--inferRW" -> handleInferRWOption _),
+          "--inferRW" -> handleInferRWOption _,
+          "--subMem" -> handleSubMemOption _),
       usage
     )
   }

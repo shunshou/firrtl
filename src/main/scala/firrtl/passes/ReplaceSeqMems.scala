@@ -6,6 +6,14 @@ import firrtl.ir._
 import firrtl.Mappers._
 import firrtl.Utils._
 import firrtl.PrimOps._
+import Annotations._
+import com.typesafe.scalalogging.LazyLogging
+
+case class ReplaceSeqMemsAnnotation(t: String, tID: TransID)
+    extends Annotation with Loose with Unstable {
+  val target = CircuitName(t)
+  def duplicate(n: Named) = this.copy(t=n.name)
+}
 
 object ReplaceSeqMems extends Pass {
 
@@ -47,9 +55,10 @@ object ReplaceSeqMems extends Pass {
       moduleNamespace.newName(n + "_ext")
     }  
 
-    val conf = new java.io.BufferedWriter(new java.io.FileWriter("memory.conf"))
+    val conf = new java.io.BufferedWriter(new java.io.FileWriter(c.main+".conf"))
     //println("UNIQUE MEMORY MACROS NEEDED")
     uniqueMems foreach { x => 
+      printf(x.serialize)
       conf write x.serialize
     }  
     conf.close()
@@ -418,10 +427,57 @@ object ReplaceSeqMems extends Pass {
 
 }
 
+// TODO: Get rid of extra passes?
+// Transform input: Middle Firrtl. Called after "HighFirrtlToMidleFirrtl"
+// To use this transform, circuit name should be annotated with its TransId.
+class ReplaceSeqMems(transID: TransID) extends Transform with LazyLogging {
+  def execute(circuit:Circuit, map: AnnotationMap) = 
+    map get transID match {
+      case Some(p) => p get CircuitName(circuit.main) match {
+        case Some(ReplaceSeqMemsAnnotation(_, _)) => TransformResult((Seq(
+          //ReplaceSeqMems
+          Legalize,
+          ReplaceSeqMems,
+          LowerTypes,
+          CheckInitialization,
+          ResolveKinds,
+          InferTypes,
+          ResolveGenders
+          ) foldLeft circuit){ (c, pass) =>
+            val x = Utils.time(pass.name)(pass run c)
+            logger debug x.serialize
+            x
+          }, None, Some(map))
+        case _ => TransformResult(circuit, None, Some(map))
+      }
+      case _ => TransformResult(circuit, None, Some(map))
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // check that mask is consistent with order of read/write vec
 // TODO: Support multiple latencies?
 // TODO: Mem tiling pass?
-// run inferreadwrite here
 
 //////////////////////////////////////////////////////////////
 // Extra reset

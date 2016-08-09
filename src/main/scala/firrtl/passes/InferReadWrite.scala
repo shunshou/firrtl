@@ -128,7 +128,7 @@ object InferReadWritePass extends Pass {
                 newName = s"rw_$idx"
                 if !allPorts(newName)
               } yield newName).head
-            val rw_exp = WSubField(WRef(mem.name, ut, MemKind(allPorts.toSeq), ug), rw, ut, ug)
+            val rw_exp = WSubField(WRef(mem.name, ut, NodeKind(), ug), rw, ut, ug)
             readwriters += rw
             readers += r
             writers += w
