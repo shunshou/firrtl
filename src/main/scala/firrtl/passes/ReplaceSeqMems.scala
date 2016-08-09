@@ -163,10 +163,10 @@ object ReplaceSeqMems extends Pass {
         }
         val name = e.asInstanceOf[WSubField].name
         val ref = e.asInstanceOf[WSubField].exp
-        if (name == "data" || name == "rdata" || name == "wdata" || name == "mask")
+        if (name == "data" || name == "rdata" || name == "wdata") // || name == "mask")
           Seq(WSubField(ref,name,newType,gender(e)))
-        //else if (name == "Mask")
-        //  Seq(WSubField(ref,name,UIntType(IntWidth(vecSize)),gender(e)))
+        else if (name == "mask")
+          Seq(WSubField(ref,name,UIntType(IntWidth(vecSize)),gender(e)))
         else Seq(e)
       }
       case t: UIntType => {
@@ -266,7 +266,7 @@ object ReplaceSeqMems extends Pass {
         if (name == "mask") {
 
           // TODO: Mask should always be input?
-          val maskExpandName = loweredExtName + "_expand"
+          /*val maskExpandName = loweredExtName + "_expand"
           val maskExpandType = VectorType(UIntType(IntWidth(1)),flattenedWidth)
           // TODO: Add to namespace
           val maskExpand = DefWire(NoInfo,maskExpandName,maskExpandType)
@@ -276,16 +276,19 @@ object ReplaceSeqMems extends Pass {
             val extLoc = WSubIndex(maskExpr,i,maskExpandType,swap(intGender))
             val intLoc = WSubIndex(intPorts,i / blockWidth,UIntType(IntWidth(1)),intGender)
             val conn = Connect(NoInfo,extLoc,intLoc)
-            //println(conn)
+            println(conn.serialize)
             memModStmts += conn
-          } 
+          }*/
 
-          memModStmts ++= catVec(maskExpandType, maskExpandName, swap(intGender),loweredExtName)
+          //memModStmts ++= catVec(maskExpandType, maskExpandName, swap(intGender),loweredExtName)
+
+          /*memModStmts ++= catVec(t, loweredExtName + "_flatten", swap(intGender),loweredExtName)
+
           val extLoc = WSubField(extRef,loweredExtName,finalType,intGender)
           val intLoc = WRef(memModStmts.last.asInstanceOf[DefNode].name,finalType,NodeKind(),swap(intGender))
-          memModStmts += Connect(NoInfo,extLoc,intLoc)
+          memModStmts += Connect(NoInfo,extLoc,intLoc)*/
         }
-        if (name == "data" || name == "rdata" || name == "wdata"){
+        if (name == "data" || name == "rdata" || name == "wdata" || name == "mask"){
           val extLoc = WSubField(extRef,loweredExtName,finalType,swap(intGender))
           if (intGender == MALE){
             // Write port (blackbox has write data ports concatenated)
