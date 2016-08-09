@@ -1,0 +1,35 @@
+circuit mem :
+  extmodule mem_EXT :
+    output T_3_data : UInt<32>
+    input T_3_addr : UInt<7>
+    input T_3_en : UInt<1>
+    input T_3_clk : Clock
+    input T_5_data : UInt<32>
+    input T_5_mask : UInt<1>
+    input T_5_addr : UInt<7>
+    input T_5_en : UInt<1>
+    input T_5_clk : Clock
+  
+
+  module mem :
+    output T_3_data : UInt<32>
+    input T_3_addr : UInt<7>
+    input T_3_en : UInt<1>
+    input T_3_clk : Clock
+    input T_5_data : UInt<32>
+    input T_5_mask : UInt<1>
+    input T_5_addr : UInt<7>
+    input T_5_en : UInt<1>
+    input T_5_clk : Clock
+  
+    inst mem_EXT of mem_EXT
+
+    T_3_data <= mem_EXT.T_3_data
+    mem_EXT.T_3_addr <= T_3_addr
+    mem_EXT.T_3_en <= T_3_en
+    mem_EXT.T_3_clk <= T_3_clk
+    mem_EXT.T_5_data  <= T_5_data
+    mem_EXT.T_5_mask  <= T_5_mask
+    mem_EXT.T_5_addr <= T_5_addr
+    mem_EXT.T_5_en <= T_5_en
+    mem_EXT.T_5_clk <= T_5_clk

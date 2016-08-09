@@ -1,0 +1,50 @@
+circuit mem :
+  extmodule mem_EXT :
+    output R0_data : UInt<32>
+    input R0_addr : UInt<7>
+    input R0_en : UInt<1>
+    input R0_clk : Clock
+    input W0_data : UInt<32>
+    input W0_mask : UInt<1>
+    input W0_addr : UInt<7>
+    input W0_en : UInt<1>
+    input W0_clk : Clock
+  
+
+  module mem :
+    output T_3_data_0 : UInt<8>
+    output T_3_data_1 : UInt<8>
+    output T_3_data_2 : UInt<8>
+    output T_3_data_3 : UInt<8>
+    input T_3_addr : UInt<7>
+    input T_3_en : UInt<1>
+    input T_3_clk : Clock
+    input T_5_data_0 : UInt<8>
+    input T_5_data_1 : UInt<8>
+    input T_5_data_2 : UInt<8>
+    input T_5_data_3 : UInt<8>
+    input T_5_mask : UInt<1>
+    input T_5_addr : UInt<7>
+    input T_5_en : UInt<1>
+    input T_5_clk : Clock
+  
+    inst mem_EXT of mem_EXT
+
+    node I0 = cat(T_5_data_1,T_5_data_0)
+    node I1 = cat(T_5_data_2,I0)
+    node I2 = cat(T_5_data_3,I1)
+
+    mem_EXT.R0_addr <= T_3_addr
+    mem_EXT.R0_en <= T_3_en
+    mem_EXT.R0_clk <= T_3_clk
+    mem_EXT.W0_data <= I2
+    mem_EXT.W0_mask <= T_5_mask
+    mem_EXT.W0_addr <= T_5_addr
+    mem_EXT.W0_en <= T_5_en
+    mem_EXT.W0_clk <= T_5_clk
+
+    T_3_data_0 <= bits(mem_EXT.R0_data,7,0)
+    T_3_data_1 <= bits(mem_EXT.R0_data,15,8)
+    T_3_data_2 <= bits(mem_EXT.R0_data,23,16)
+    T_3_data_3 <= bits(mem_EXT.R0_data,31,24)
+

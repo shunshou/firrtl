@@ -124,6 +124,7 @@ class HighFirrtlToMiddleFirrtl () extends Transform with SimpleRun {
 class MiddleFirrtlToLowFirrtl () extends Transform with SimpleRun {
    val passSeq = Seq(
       passes.Legalize,
+      passes.ReplaceSeqMems,
       passes.LowerTypes,
       passes.ResolveKinds,
       passes.InferTypes,
