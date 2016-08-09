@@ -53,7 +53,8 @@ object ReplaceSeqMems extends Pass {
     }  
 
     val out = Circuit(c.info, updatedModules, c.main)
-    //println(out)
+    //println(out.serialize)
+    println(out)
     out
   }
 
@@ -346,12 +347,29 @@ object ReplaceSeqMems extends Pass {
 
 }
 
+// TODO: Support multiple latencies?
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 
 // TODO: Mem tiling pass?
+// If wmask = true or wmode
 
 //////////////////////////////////////////////////////////////
 // Extra reset
+// mask gran??
 // no mask
+// conf-like?
+// match name
