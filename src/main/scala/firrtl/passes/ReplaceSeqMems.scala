@@ -24,9 +24,11 @@ object ReplaceSeqMems extends Pass {
 
   def replaceSmemRef(e: Expression): Expression = {
     e map replaceSmemRef match {
-      case WRef(name,tpe,MemKind(_),gender) if smemNames.contains(name) => {
+      case WRef(name,BundleType(fields),MemKind(_),gender) if smemNames.contains(name) => {
         // WRef name == instance name
-        WRef(name,tpe,InstanceKind(),gender)
+        val resetField = Field("reset",Default,UIntType(IntWidth(1)))
+        WRef(name,BundleType(fields),InstanceKind(),gender)
+        //WRef(name,BundleType(fields :+ resetField),InstanceKind(),gender)
       }
       case e => e
     }
@@ -34,21 +36,25 @@ object ReplaceSeqMems extends Pass {
 
   def updateModules(m: Module): Seq[DefModule] = {
     def updateStmts(s: Statement): Statement = s map updateStmts map replaceSmemRef 
-    val updatedModule = m.copy(body = updateStmts(replaceSmem(m.body)))
+    //val updatedStmts = updateStmts(replaceSmem(m.body.stmts))
+    val updatedStmts = updateStmts(replaceSmem(m.body))
+    val updatedModule = m.copy(body = updatedStmts)
     //println(updatedModule.body.serialize)
-    newModules.toSeq :+ updatedModule
+    //newModules.toSeq :+ updatedModule
+    Seq(updatedModule)
   }
 
   def run(c: Circuit) = {
     lazy val moduleNamespace = Namespace(c)
 
-    val updatedModules = c.modules flatMap {
+    val updatedModulesTemp = c.modules flatMap {
       case m: Module => updateModules(m)
       case m: ExtModule => Seq(m)
     } map {
       case m: Module => m.copy(body = Utils.squashEmpty(m.body))
       case m: ExtModule => m
     }
+    val updatedModules = updatedModulesTemp ++ newModules
 
     smemNames foreach { n =>
       moduleNamespace.newName(n)
@@ -124,11 +130,16 @@ object ReplaceSeqMems extends Pass {
     s map replaceSmem match {
       case m: DefMemory if m.readLatency > 0 => {
         val memType = get_type(m).asInstanceOf[BundleType]
-        newModules += createSmemMod(m,memType)
+        val newMemMod = createSmemMod(m,memType)
+        newModules += newMemMod
         smemNames += m.name
         val instName = m.name
         //println(memType)
-        WDefInstance(m.info, instName, m.name, memType)
+        //val resetTop = WRef("reset",UIntType(IntWidth(1)),Default,UNKNOWNGENDER)
+        //val memRef = WRef(instName,module_type(newMemMod),InstanceKind(),MALE)
+        //val resetInt = WSubField(memRef,"reset",UIntType(IntWidth(1)),UNKNOWNGENDER)
+        WDefInstance(m.info, instName, m.name, module_type(newMemMod)) 
+        //Block(WDefInstance(m.info, instName, m.name, module_type(newMemMod)) :+ Connect(NoInfo,resetInt,resetTop))
       }
       case s => s
     }
@@ -152,8 +163,10 @@ object ReplaceSeqMems extends Pass {
         }
         val name = e.asInstanceOf[WSubField].name
         val ref = e.asInstanceOf[WSubField].exp
-        if (name == "data" || name == "mask" || name == "rdata")
+        if (name == "data" || name == "rdata" || name == "wdata" || name == "mask")
           Seq(WSubField(ref,name,newType,gender(e)))
+        //else if (name == "Mask")
+        //  Seq(WSubField(ref,name,UIntType(IntWidth(vecSize)),gender(e)))
         else Seq(e)
       }
       case t: UIntType => {
@@ -226,7 +239,7 @@ object ReplaceSeqMems extends Pass {
 
     // Map from Int R/W/RW port name to Ext name
     def lowerExtName(e: Expression): String = e match {
-      case e: WRef => nameMap(e.name)
+      case e: WRef => if (e.name != "reset") nameMap(e.name) else e.name
       case e: WSubField => lowerExtName(e.exp) + delim + e.name
       case e: WSubIndex => lowerExtName(e.exp) + delim + e.value
     }
@@ -262,14 +275,17 @@ object ReplaceSeqMems extends Pass {
           (0 until flattenedWidth) foreach { i =>
             val extLoc = WSubIndex(maskExpr,i,maskExpandType,swap(intGender))
             val intLoc = WSubIndex(intPorts,i / blockWidth,UIntType(IntWidth(1)),intGender)
-            memModStmts += Connect(NoInfo,extLoc,intLoc)
+            val conn = Connect(NoInfo,extLoc,intLoc)
+            //println(conn)
+            memModStmts += conn
           } 
+
           memModStmts ++= catVec(maskExpandType, maskExpandName, swap(intGender),loweredExtName)
           val extLoc = WSubField(extRef,loweredExtName,finalType,intGender)
           val intLoc = WRef(memModStmts.last.asInstanceOf[DefNode].name,finalType,NodeKind(),swap(intGender))
           memModStmts += Connect(NoInfo,extLoc,intLoc)
         }
-        if (name == "data" || name == "rdata"){
+        if (name == "data" || name == "rdata" || name == "wdata"){
           val extLoc = WSubField(extRef,loweredExtName,finalType,swap(intGender))
           if (intGender == MALE){
             // Write port (blackbox has write data ports concatenated)
@@ -313,7 +329,7 @@ object ReplaceSeqMems extends Pass {
     val dataBlockWidth = baseWidth(m.dataType)
 
     // Unique # for each port
-
+    /*
     val oldMemPortNames = (m.writers ++ m.readers ++ m.readwriters)
     val memPortNames = oldMemPortNames.zipWithIndex.map{case (x,i) => {
       val identifier = {
@@ -323,19 +339,20 @@ object ReplaceSeqMems extends Pass {
       }
       (x,identifier+i)
     }}.toMap
+    */
 
-    /*
     val readers = m.readers.zipWithIndex.map{case (r,i) => (r,"R"+i)}
     val writers = m.writers.zipWithIndex.map{case (w,i) => (w,"W"+i)}
     val readwriters = m.readwriters.zipWithIndex.map{case (rw,i) => (rw,"RW"+i)}
     val memPortNames = (readers ++ writers ++ readwriters).toMap
-    */
 
     val memModStmts = ArrayBuffer[Statement]()
 
-    val memPorts = tpe.fields map { f =>
+    val memPortsTemp = tpe.fields map { f =>
       Port(m.info,f.name,to_dir(toGender(f.flip)),f.tpe)
-    }
+    } 
+
+    val memPorts = memPortsTemp //:+ Port(m.info,"reset",Input,UIntType(IntWidth(1)))
 
     //val memPorts = memPortsTemp :+ Port(m.info,"reset",Input,UIntType(IntWidth(1)))
 
@@ -353,7 +370,9 @@ object ReplaceSeqMems extends Pass {
       })
     }
 
-    val blackBoxPorts = blackBoxPortsTemp.toSeq.filter(x => x.name.split("_").last != "NOTUSED")
+    val blackBoxPorts = blackBoxPortsTemp.toSeq.filter(x => x.name.split("_").last != "NOTUSED") //:+
+      //Port(m.info,"reset",Input,UIntType(IntWidth(1)))
+
     //println(blackBoxPorts)
     val noMask = ((blackBoxPortsTemp.length-1) == blackBoxPorts.length)
 
