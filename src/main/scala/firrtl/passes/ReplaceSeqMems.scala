@@ -27,6 +27,7 @@ object ReplaceSeqMems extends Pass {
   def updateModules(m: Module): Seq[DefModule] = {
     def updateStmts(s: Statement): Statement = s map updateStmts map replaceSmemRef 
     val updatedModule = m.copy(body = updateStmts(replaceSmem(m.body)))
+    //println(updatedModule.body.serialize)
     newModules.toSeq :+ updatedModule
   }
 
@@ -46,11 +47,14 @@ object ReplaceSeqMems extends Pass {
       moduleNamespace.newName(n + "_ext")
     }  
 
+    println("UNIQUE MEMORY MACROS NEEDED")
     uniqueMems foreach { x => 
       println(x.m.serialize)
     }  
 
-    Circuit(c.info, updatedModules, c.main)
+    val out = Circuit(c.info, updatedModules, c.main)
+    //println(out)
+    out
   }
 
   case class MemProto(
@@ -88,6 +92,7 @@ object ReplaceSeqMems extends Pass {
         newModules += createSmemMod(m,memType)
         smemNames += m.name
         val instName = m.name
+        //println(memType)
         WDefInstance(m.info, instName, m.name, memType)
       }
       case s => s
@@ -112,7 +117,7 @@ object ReplaceSeqMems extends Pass {
         }
         val name = e.asInstanceOf[WSubField].name
         val ref = e.asInstanceOf[WSubField].exp
-        if (name == "data" || name == "mask")
+        if (name == "data" || name == "mask" || name == "rdata")
           Seq(WSubField(ref,name,newType,gender(e)))
         else Seq(e)
       }
@@ -212,7 +217,7 @@ object ReplaceSeqMems extends Pass {
           val intLoc = WRef(memModStmts.last.asInstanceOf[DefNode].name,finalType,NodeKind(),swap(intGender))
           memModStmts += Connect(NoInfo,extLoc,intLoc)
         }
-        if (name == "data"){
+        if (name == "data" || name == "rdata"){
           val extLoc = WSubField(extRef,loweredExtName,finalType,swap(intGender))
           if (intGender == MALE){
             // Write port (blackbox has write data ports concatenated)
@@ -244,7 +249,7 @@ object ReplaceSeqMems extends Pass {
 
   def createSmemMod(m: DefMemory, tpe: BundleType): Module = {
 
-    println(m.serialize)
+    //println(m.serialize)
     //println(m)
 
     val dataBlockWidth = baseWidth(m.dataType)
@@ -341,24 +346,12 @@ object ReplaceSeqMems extends Pass {
 
 }
 
+
+
+
+
 // TODO: Mem tiling pass?
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 //////////////////////////////////////////////////////////////
 // Extra reset
-// WR port, no mask
+// no mask

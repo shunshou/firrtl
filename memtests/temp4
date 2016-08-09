@@ -1,0 +1,48 @@
+circuit sram6t :
+  extmodule mem_ext :
+    input RW0_wmode : UInt<1>
+    output RW0_rdata : UInt<32>
+    input RW0_data : UInt<32>
+    input RW0_mask : UInt<1>
+    input RW0_addr : UInt<7>
+    input RW0_en : UInt<1>
+    input RW0_clk : Clock
+  
+
+  module mem :
+    input rw_0 : { wmode : UInt<1>, flip rdata : UInt<32>, data : UInt<32>, mask : UInt<1>, addr : UInt<7>, en : UInt<1>, clk : Clock}
+  
+    inst mem_ext of mem_ext
+    mem_ext.RW0_wmode <= rw_0.wmode
+    rw_0.rdata <= mem_ext.RW0_rdata
+    mem_ext.RW0_data <= rw_0.data
+    mem_ext.RW0_mask <= rw_0.mask
+    mem_ext.RW0_addr <= rw_0.addr
+    mem_ext.RW0_en <= rw_0.en
+    mem_ext.RW0_clk <= rw_0.clk
+
+  module sram6t :
+    input clk : Clock
+    input reset : UInt<1>
+    output io : { flip en : UInt<1>, flip wen : UInt<1>, flip waddr : UInt<8>, flip wdata : UInt<32>, flip raddr : UInt<8>, rdata : UInt<32>}
+  
+    inst mem of mem
+    node T_0 = eq(io.wen, UInt<1>("h0"))
+    node T_1 = and(io.en, T_0)
+    wire T_2 : UInt<8>
+    node GEN_0 = validif(T_1, io.raddr)
+    node GEN_1 = mux(T_1, UInt<1>("h1"), UInt<1>("h0"))
+    node T_4 = and(io.en, io.wen)
+    node GEN_2 = validif(T_4, io.waddr)
+    node GEN_3 = validif(T_4, clk)
+    node GEN_4 = mux(T_4, UInt<1>("h1"), UInt<1>("h0"))
+    node GEN_5 = validif(T_4, io.wdata)
+    node GEN_6 = mux(T_4, UInt<1>("h1"), UInt<1>("h0"))
+    io.rdata <= mem.rw_0.rdata
+    mem.rw_0.wmode <= GEN_4
+    mem.rw_0.data <= GEN_5
+    mem.rw_0.mask <= GEN_6
+    T_2 <= GEN_0
+    mem.rw_0.clk <= clk
+    mem.rw_0.en <= or(GEN_1, GEN_4)
+    mem.rw_0.addr <= mux(GEN_4, bits(GEN_2, 6, 0), bits(T_2, 6, 0))
