@@ -61,7 +61,9 @@ object ReplaceSeqMems extends Pass {
       moduleNamespace.newName(n + "_ext")
     }  
 
-    val conf = new java.io.BufferedWriter(new java.io.FileWriter(c.main+".conf"))
+    val confFront = Driver.outputPath.split("\\.").head
+
+    val conf = new java.io.BufferedWriter(new java.io.FileWriter(confFront+".conf"))
     //println("UNIQUE MEMORY MACROS NEEDED")
     uniqueMems foreach { x => 
       printf(x.serialize)
@@ -263,7 +265,7 @@ object ReplaceSeqMems extends Pass {
         val flattenedWidth = t.size * blockWidth
         val finalType = baseTypeWithNewWidth(t.tpe,flattenedWidth)
   
-        if (name == "mask") {
+        //if (name == "mask") {
 
           // TODO: Mask should always be input?
           /*val maskExpandName = loweredExtName + "_expand"
@@ -287,12 +289,21 @@ object ReplaceSeqMems extends Pass {
           val extLoc = WSubField(extRef,loweredExtName,finalType,intGender)
           val intLoc = WRef(memModStmts.last.asInstanceOf[DefNode].name,finalType,NodeKind(),swap(intGender))
           memModStmts += Connect(NoInfo,extLoc,intLoc)*/
-        }
+        //}
         if (name == "data" || name == "rdata" || name == "wdata" || name == "mask"){
-          val extLoc = WSubField(extRef,loweredExtName,finalType,swap(intGender))
+
+          val frontName = loweredExtName.split("_").head
+          val backName = loweredExtName.split("_").last
+          val portName = {
+            if (frontName.startsWith("RW") && backName == "data")  frontName + "_wdata"
+            else if (frontName.startsWith("RW") && backName == "mask") frontName + "_wmask"
+            else loweredExtName
+          }
+          // wdata, wmask only associated w/ write port
+          val extLoc = WSubField(extRef,portName,finalType,swap(intGender))
           if (intGender == MALE){
             // Write port (blackbox has write data ports concatenated)
-            memModStmts ++= catVec(t,loweredIntName,intGender,loweredExtName)
+            memModStmts ++= catVec(t,loweredIntName,intGender,portName)
             val intLoc = WRef(memModStmts.last.asInstanceOf[DefNode].name,finalType,NodeKind(),intGender)
             memModStmts += Connect(NoInfo,extLoc,intLoc)
           }
@@ -307,11 +318,19 @@ object ReplaceSeqMems extends Pass {
         // TODO: Anything else that can be a Vec? besides data/mask
       }
       case t => {
-        val portName = lowerExtName(intPorts)
+        val portNameTemp = lowerExtName(intPorts)
         // TODO: Don't use array buffer; use EmptyExpression or similar
         // Don't connect write mask if its a UInt (would be same as WE)
         val ignoreMask = lowerExtName(intPorts).split("_").last == "mask"
         if (!ignoreMask){
+          // Mask wouldn't exist here, only data
+          //println(portName)
+          val frontName = portNameTemp.split("_").head
+          val backName = portNameTemp.split("_").last
+          val portName = {
+            if (frontName.startsWith("RW") && backName == "data")  frontName + "_wdata"
+            else portNameTemp
+          }
           val extLoc = WSubField(extRef,portName,t,swap(intGender))
           memModStmts += {
             if (intGender == FEMALE) Connect(NoInfo,intPorts,extLoc)
@@ -367,7 +386,15 @@ object ReplaceSeqMems extends Pass {
     val blackBoxPortsTemp = tpe.fields flatMap { f =>
       val exps = flattenMemVec(dataBlockWidth,WRef(memPortNames(f.name), f.tpe, PortKind(), toGender(f.flip)))
       exps map ( e => {
-        val portName = LowerTypes.loweredName(e)
+        val portNameTemp = LowerTypes.loweredName(e)
+        val frontName = portNameTemp.split("_").head
+        val backName = portNameTemp.split("_").last
+        val portName = {
+          if (f.name.split("_").head == "rw" && backName == "data") frontName + "_wdata"
+          else if (f.name.split("_").head == "rw" && backName == "mask") frontName + "_wmask"
+          else portNameTemp
+        }  
+        //println(portName)
         //val isMask = portName.split("_").last == "mask"
         Port(m.info, portName, to_dir(gender(e)), Utils.tpe(e)) 
       })
@@ -476,7 +503,7 @@ class ReplaceSeqMems(transID: TransID) extends Transform with LazyLogging {
     }
 }
 
-
+// Have connect to/from maps
 
 
 

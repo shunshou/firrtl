@@ -36,6 +36,9 @@ import Utils._
 import Parser.{InfoMode, IgnoreInfo, UseInfo, GenInfo, AppendInfo}
 
 object Driver {
+
+  var outputPath = ""
+
   private val usage = """
 Usage: sbt "run-main firrtl.Driver -i <input_file> -o <output_file> -X <compiler>"
        firrtl -i <input_file> -o <output_file> -X <compiler> [options]
@@ -160,6 +163,8 @@ Options:
     // Get input circuit/output filenames
     val input = options.getOrElse(InputFileName, throw new Exception("No input file provided!" + usage))
     val output = options.getOrElse(OutputFileName, throw new Exception("No output file provided!" + usage))
+
+    outputPath = output
 
     val infoMode = options.get(InfoModeOption) match {
       case (Some("use") | None) => UseInfo
