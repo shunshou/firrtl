@@ -61,7 +61,7 @@ object ReplaceSeqMems extends Pass {
       moduleNamespace.newName(n + "_ext")
     }  
 
-    val confFront = Driver.outputPath.split("\\.").head
+    val confFront = Driver.outputPath.split("\\.").init.mkString(".")
 
     val conf = new java.io.BufferedWriter(new java.io.FileWriter(confFront+".conf"))
     //println("UNIQUE MEMORY MACROS NEEDED")
